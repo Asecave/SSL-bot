@@ -19,14 +19,16 @@ import javax.swing.JPanel;
 public class Overlay extends JPanel implements KeyListener {
 	
 	private JFrame frame;
-	public Rectangle size;
+	private Rectangle size;
 	private BufferedImage img;
+	private int screenshotHeight;
 
 	public Overlay() {
 		
 		this.setBackground(new Color(0f, 0f, 0f, 0.5f));
 		
 		size = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+		screenshotHeight = size.height - size.width / 12;
 		
 		frame = new JFrame("SSL Bot");
         frame.setUndecorated(true);
@@ -94,11 +96,17 @@ public class Overlay extends JPanel implements KeyListener {
 		g2d.drawString("Press x to hide", 50, 150);
 		g2d.drawString("Press p to calculate shot", 50, 170);
 		g2d.drawRect(40, 110, 400, 200);
+		g2d.setColor(Color.RED);
+		g2d.drawLine(0, screenshotHeight, size.width, screenshotHeight);
 	}
 	
 	public void drawImage(BufferedImage img) {
 		this.img = img;
 		repaint();
+	}
+
+	public int getScreenshotHeight() {
+		return screenshotHeight;
 	}
 	
 }
