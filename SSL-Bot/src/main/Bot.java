@@ -17,6 +17,10 @@ public class Bot {
 
 	private Overlay overlay;
 	private Robot robot;
+	private Point ownTank;
+	private Point[] enemyTanks;
+	private Shot[] probes;
+	private boolean shootLeft = true;
 
 	public Bot() {
 		overlay = new Overlay();
@@ -37,25 +41,41 @@ public class Bot {
 	public void start() {
 		BufferedImage screen = robot
 				.createScreenCapture(new Rectangle(Toolkit.getDefaultToolkit().getScreenSize().width, overlay.getScreenshotHeight()));
-		BufferedImage info = new BufferedImage(screen.getWidth(), screen.getHeight(), BufferedImage.TYPE_INT_ARGB);
+		overlay.maximize();
+		Graphics2D g2d = overlay.getGraphics();
 
-		// Own tank detection
-		Point ownTank = detectOwnTank(screen);
-
-		// Enemy tank detection
-//		Point[] enemyTanks = detectEnemyTanks(screen);
-
-		Graphics2D g2d = info.createGraphics();
-//		g2d.drawImage(enemyTank, 0, 0, null);
+		detectOwnTank(screen);
 		g2d.setColor(Color.GREEN);
-		g2d.drawRect(ownTank.x - 30, ownTank.y - 30, 60, 60);
-		g2d.drawLine(ownTank.x - 20, ownTank.y, ownTank.x + 20, ownTank.y);
-		g2d.drawLine(ownTank.x, ownTank.y - 20, ownTank.x, ownTank.y + 20);
+		drawTankPos(ownTank, g2d);
+		overlay.repaint();
+
+		detectEnemyTanks(screen);
 		g2d.setColor(Color.RED);
-//		g2d.drawRect(enemyTankX - 30, enemyTankY - 30, 60, 60);
-//		g2d.drawLine(enemyTankX - 20, enemyTankY, enemyTankX + 20, enemyTankY);
-//		g2d.drawLine(enemyTankX, enemyTankY - 20, enemyTankX, enemyTankY + 20);
-		overlay.drawImage(info);
+		for (int i = 0; i < enemyTanks.length; i++) {
+			drawTankPos(enemyTanks[i], g2d);
+		}
+		overlay.repaint();
+
+		shootProbes(ownTank);
+
+		overlay.clear();
+		g2d.setColor(Color.GREEN);
+		drawTankPos(ownTank, g2d);
+		g2d.setColor(Color.RED);
+		for (int i = 0; i < enemyTanks.length; i++) {
+			drawTankPos(enemyTanks[i], g2d);
+		}
+		g2d.setColor(new Color(0.4f, 1f, 0.4f, 1f));
+		for (int i = 0; i < probes.length; i++) {
+			if (probes[i].hit()) {
+				Shot s = new Shot(ownTank, probes[i].getPower(), probes[i].getAngle(), shootLeft);
+				while (s.isAlive()) {
+					s.step(enemyTanks);
+					g2d.drawLine(s.getPrevX(), s.getPrevY(), s.getX(), s.getY());
+				}
+			}
+		}
+		overlay.repaint();
 	}
 
 	private boolean match(Color color1, Color color2, int tolerance) {
@@ -69,6 +89,12 @@ public class Bot {
 		boolean g = g1 - tolerance < g2 && g1 + tolerance > g2;
 		boolean b = b1 - tolerance < b2 && r1 + tolerance > b2;
 		return r && g && b;
+	}
+
+	private void drawTankPos(Point pos, Graphics2D g2d) {
+		g2d.drawRect(pos.x - 30, pos.y - 30, 60, 60);
+		g2d.drawLine(pos.x - 20, pos.y, pos.x + 20, pos.y);
+		g2d.drawLine(pos.x, pos.y - 20, pos.x, pos.y + 20);
 	}
 
 	private BufferedImage blurImage(BufferedImage img) {
@@ -85,8 +111,8 @@ public class Bot {
 
 		return op.filter(img, null);
 	}
-	
-	private Point detectOwnTank(BufferedImage screen) {
+
+	private void detectOwnTank(BufferedImage screen) {
 		BufferedImage ownTank = new BufferedImage(screen.getWidth(), screen.getHeight(), BufferedImage.TYPE_INT_ARGB);
 		for (int x = 0; x < screen.getWidth(); x++) {
 			for (int y = 0; y < screen.getHeight(); y++) {
@@ -110,33 +136,95 @@ public class Bot {
 				}
 			}
 		}
-		return pos;
+		this.ownTank = pos;
 	}
-	
-//	private Point[] detectEnemyTanks(BufferedImage screen) {
-//		BufferedImage enemyTank = new BufferedImage(screen.getWidth(), screen.getHeight(), BufferedImage.TYPE_INT_ARGB);
-//		for (int x = 0; x < screen.getWidth(); x++) {
-//			for (int y = 0; y < screen.getHeight(); y++) {
-//				Color pixel = new Color(screen.getRGB(x, y));
-//				if (match(pixel, new Color(200, 5, 5), 30)) {
-//					enemyTank.setRGB(x, y, pixel.getRGB());
-//				}
-//			}
-//		}
-//		enemyTank = blurImage(enemyTank);
-//		int enemyTankX = 0;
-//		int enemyTankY = 0;
-//		Color brightestColor = null;
-//		for (int x = 0; x < enemyTank.getWidth(); x++) {
-//			for (int y = 0; y < enemyTank.getHeight(); y++) {
-//				Color pixel = new Color(enemyTank.getRGB(x, y));
-//				if (brightestColor == null || pixel.getRed() + pixel.getGreen() + pixel.getBlue() > brightestColor.getRed()
-//						+ brightestColor.getGreen() + brightestColor.getBlue()) {
-//					brightestColor = pixel;
-//					enemyTankX = x;
-//					enemyTankY = y;
-//				}
-//			}
-//		}
-//	}
+
+	private void detectEnemyTanks(BufferedImage screen) {
+		Point[] tanks = new Point[7];
+		BufferedImage enemyTank = new BufferedImage(screen.getWidth(), screen.getHeight(), BufferedImage.TYPE_INT_ARGB);
+		for (int x = 0; x < screen.getWidth(); x++) {
+			for (int y = 0; y < screen.getHeight(); y++) {
+				Color pixel = new Color(screen.getRGB(x, y));
+				if (match(pixel, new Color(223, 15, 15), 30)) {
+					enemyTank.setRGB(x, y, pixel.getRGB());
+				}
+			}
+		}
+		enemyTank = blurImage(enemyTank);
+
+		for (int t = 0; t < 7; t++) {
+			tanks[t] = new Point();
+			Color brightestColor = null;
+			for (int x = 0; x < enemyTank.getWidth(); x++) {
+				y: for (int y = 0; y < enemyTank.getHeight(); y++) {
+					Color pixel = new Color(enemyTank.getRGB(x, y));
+					if (brightestColor == null || pixel.getRed() + pixel.getGreen() + pixel.getBlue() > brightestColor.getRed()
+							+ brightestColor.getGreen() + brightestColor.getBlue()) {
+						for (int i = 0; i < tanks.length; i++) {
+							if (tanks[i] != null && t != i) {
+								if (tanks[i].distance(x, y) < 60) {
+									continue y;
+								}
+							}
+						}
+						brightestColor = pixel;
+						tanks[t].x = x;
+						tanks[t].y = y;
+					}
+				}
+			}
+		}
+		int count = 0;
+		for (int i = 0; i < tanks.length; i++) {
+			if (tanks[i].x != 0 && tanks[i].y != 0) {
+				count++;
+			}
+		}
+		Point[] cut = new Point[count];
+		for (int i = 0; i < cut.length; i++) {
+			cut[i] = tanks[i];
+		}
+		this.enemyTanks = cut;
+	}
+
+	private void shootProbes(Point start) {
+
+		Graphics2D g2d = overlay.getGraphics();
+
+		probes = new Shot[9000];
+		for (int i = 89; i >= 0; i--) {
+			for (int j = 0; j < 100; j++) {
+				probes[i * 100 + j] = new Shot(start, j, i, shootLeft);
+			}
+		}
+
+		g2d.setColor(new Color(1f, 1f, 1f, 0.1f));
+
+		while (true) {
+			boolean probesAlive = false;
+			for (int i = 0; i < probes.length; i++) {
+				if (probes[i].isAlive()) {
+					probesAlive = true;
+					probes[i].step(enemyTanks);
+					g2d.drawLine(probes[i].getPrevX(), probes[i].getPrevY(), probes[i].getX(), probes[i].getY());
+				}
+			}
+			overlay.repaint();
+			if (!probesAlive) {
+				break;
+			}
+		}
+	}
+
+	public int getScreenWidth() {
+		return overlay.getScreenSize().width;
+	}
+
+	public int getScreenHeight() {
+		return overlay.getScreenSize().height;
+	}
+
+	public Overlay getOverlay() {
+		return overlay;
+	}
 }
