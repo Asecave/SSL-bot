@@ -23,6 +23,7 @@ public class Overlay extends JPanel implements KeyListener {
 	private BufferedImage img;
 	private Graphics2D g2d;
 	private int screenshotHeight;
+	private boolean shootLeft;
 
 	public Overlay() {
 
@@ -74,6 +75,15 @@ public class Overlay extends JPanel implements KeyListener {
 			};
 			loop.start();
 		}
+		if (e.getKeyCode() == KeyEvent.VK_D) {
+			shootLeft = !shootLeft;
+		}
+		if (e.getKeyCode() == KeyEvent.VK_LEFT) {
+			Bot.get().selectLeft();
+		}
+		if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
+			Bot.get().selectRight();
+		}
 	}
 
 	@Override
@@ -94,16 +104,18 @@ public class Overlay extends JPanel implements KeyListener {
 
 	private void drawInfo(Graphics2D g2d) {
 		g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		g2d.setFont(new Font("Courier New", Font.BOLD, 18));
+		g2d.setFont(getFont());
 
 		g2d.setStroke(new BasicStroke(2));
 		g2d.setColor(Color.CYAN);
 		g2d.drawString("SSL Bot", 50, 50);
-		g2d.drawString("Controls", 50, 100);
+		g2d.drawString("Controls:", 50, 100);
 		g2d.drawString("Press Esc to exit", 50, 130);
 		g2d.drawString("Press x to hide", 50, 150);
-		g2d.drawString("Press space to calculate shot", 50, 170);
-		g2d.drawRect(40, 110, 400, 200);
+		g2d.drawString("Press space to start calculations", 50, 170);
+		g2d.drawString("Press d to toggle direction", 50, 190);
+		g2d.drawString("Press left/right arrow to select trace", 50, 210);
+		g2d.drawRect(40, 110, 435, 110);
 		g2d.setColor(Color.RED);
 		g2d.drawLine(0, screenshotHeight, size.width, screenshotHeight);
 	}
@@ -115,6 +127,10 @@ public class Overlay extends JPanel implements KeyListener {
 	public int getScreenshotHeight() {
 		return screenshotHeight;
 	}
+	
+	public boolean getShootLeft() {
+		return shootLeft;
+	}
 
 	public Rectangle getScreenSize() {
 		return size;
@@ -123,5 +139,9 @@ public class Overlay extends JPanel implements KeyListener {
 	public void clear() {
 		g2d.setBackground(new Color(0f, 0f, 0f, 0f));
 		g2d.clearRect(0, 0, img.getWidth(), img.getHeight());
+	}
+	
+	public Font getFont() {
+		return new Font("Courier New", Font.BOLD, 18);
 	}
 }

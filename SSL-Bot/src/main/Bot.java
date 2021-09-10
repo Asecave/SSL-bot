@@ -1,10 +1,12 @@
 package main;
 
 import java.awt.AWTException;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.Robot;
 import java.awt.Toolkit;
 import java.awt.image.BufferedImage;
@@ -20,7 +22,7 @@ public class Bot {
 	private Point ownTank;
 	private Point[] enemyTanks;
 	private Shot[] probes;
-	private boolean shootLeft = true;
+	private int selectedShot;
 
 	public Bot() {
 		overlay = new Overlay();
@@ -43,6 +45,8 @@ public class Bot {
 				.createScreenCapture(new Rectangle(Toolkit.getDefaultToolkit().getScreenSize().width, overlay.getScreenshotHeight()));
 		overlay.maximize();
 		Graphics2D g2d = overlay.getGraphics();
+		g2d.setFont(overlay.getFont());
+		g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
 		detectOwnTank(screen);
 		g2d.setColor(Color.GREEN);
@@ -57,25 +61,46 @@ public class Bot {
 		overlay.repaint();
 
 		shootProbes(ownTank);
-
-		overlay.clear();
-		g2d.setColor(Color.GREEN);
-		drawTankPos(ownTank, g2d);
-		g2d.setColor(Color.RED);
+		
+		int bestShot = 0;
+		int mostRightTank = 0;
 		for (int i = 0; i < enemyTanks.length; i++) {
-			drawTankPos(enemyTanks[i], g2d);
+			if (enemyTanks[i].getX() > enemyTanks[mostRightTank].getX()) {
+				mostRightTank = i;
+			}
 		}
-		g2d.setColor(new Color(0.4f, 1f, 0.4f, 1f));
 		for (int i = 0; i < probes.length; i++) {
-			if (probes[i].hit()) {
-				Shot s = new Shot(ownTank, probes[i].getPower(), probes[i].getAngle(), shootLeft);
-				while (s.isAlive()) {
-					s.step(enemyTanks);
-					g2d.drawLine(s.getPrevX(), s.getPrevY(), s.getX(), s.getY());
+			if (probes[i].getHitTank() == mostRightTank) {
+				if (probes[bestShot].getAngle() < probes[i].getAngle()) {
+					bestShot = i;
 				}
 			}
 		}
-		overlay.repaint();
+		selectedShot = bestShot;
+		
+		draw();
+	}
+	
+	private void drawTraceInfo(Shot s) {
+		Graphics2D g2d = overlay.getGraphics();
+		g2d.setColor(Color.CYAN);
+		g2d.setStroke(new BasicStroke(2));
+		g2d.drawString("Selected Trace:", 50, 300);
+		g2d.drawString("Power: " + (s.getPower() + 1), 50, 330);
+		g2d.drawString("Angle: " + s.getAngle(), 50, 350);
+		g2d.drawRect(40, 310, 435, 110);
+	}
+
+	private void drawTankPositions() {
+		Graphics2D g2d = overlay.getGraphics();
+		g2d.setColor(Color.GREEN);
+		drawTankPos(ownTank, g2d);
+		g2d.drawString("You", ownTank.x + 40, ownTank.y + 20);
+		g2d.setColor(Color.RED);
+		for (int i = 0; i < enemyTanks.length; i++) {
+			drawTankPos(enemyTanks[i], g2d);
+			g2d.drawString("i: " + i, enemyTanks[i].x + 40, enemyTanks[i].y + 20);
+		}
 	}
 
 	private boolean match(Color color1, Color color2, int tolerance) {
@@ -95,6 +120,8 @@ public class Bot {
 		g2d.drawRect(pos.x - 30, pos.y - 30, 60, 60);
 		g2d.drawLine(pos.x - 20, pos.y, pos.x + 20, pos.y);
 		g2d.drawLine(pos.x, pos.y - 20, pos.x, pos.y + 20);
+		g2d.drawString("x: " + pos.x, pos.x + 40, pos.y - 20);
+		g2d.drawString("y: " + pos.y, pos.x + 40, pos.y);
 	}
 
 	private BufferedImage blurImage(BufferedImage img) {
@@ -194,7 +221,7 @@ public class Bot {
 		probes = new Shot[9000];
 		for (int i = 89; i >= 0; i--) {
 			for (int j = 0; j < 100; j++) {
-				probes[i * 100 + j] = new Shot(start, j, i, shootLeft);
+				probes[i * 100 + j] = new Shot(start, j, i, overlay.getShootLeft());
 			}
 		}
 
@@ -214,6 +241,45 @@ public class Bot {
 				break;
 			}
 		}
+
+		int count = 0;
+		for (int i = 0; i < probes.length; i++) {
+			if (probes[i].hit()) {
+				count++;
+			}
+		}
+		Shot[] hitProbes = new Shot[count];
+		int index = 0;
+		for (int i = 0; i < probes.length; i++) {
+			if (probes[i].hit()) {
+				hitProbes[index] = probes[i];
+				index++;
+			}
+		}
+		probes = hitProbes;
+	}
+
+	private void drawShots() {
+		Graphics2D g2d = overlay.getGraphics();
+		g2d.setColor(new Color(0f, 0f, 0.8f, 1f));
+		for (int i = 0; i < probes.length; i++) {
+			if (i == selectedShot) {
+				continue;
+			}
+			Shot s = new Shot(ownTank, probes[i].getPower(), probes[i].getAngle(), overlay.getShootLeft());
+			while (s.isAlive()) {
+				s.step(enemyTanks);
+				g2d.drawLine(s.getPrevX(), s.getPrevY(), s.getX(), s.getY());
+			}
+		}
+		g2d.setColor(new Color(0.6f, 0.6f, 1f, 1f));
+		g2d.setStroke(new BasicStroke(4f));
+		Shot s = new Shot(ownTank, probes[selectedShot].getPower(), probes[selectedShot].getAngle(), overlay.getShootLeft());
+		while (s.isAlive()) {
+			s.step(enemyTanks);
+			g2d.drawLine(s.getPrevX(), s.getPrevY(), s.getX(), s.getY());
+		}
+		g2d.setStroke(new BasicStroke(1f));
 	}
 
 	public int getScreenWidth() {
@@ -226,5 +292,27 @@ public class Bot {
 
 	public Overlay getOverlay() {
 		return overlay;
+	}
+
+	public void selectLeft() {
+		if (selectedShot > 0) {
+			selectedShot--;
+			draw();
+		}
+	}
+
+	public void selectRight() {
+		if (selectedShot < probes.length - 1) {
+			selectedShot++;
+			draw();
+		}
+	}
+	
+	private void draw() {
+		overlay.clear();
+		drawShots();
+		drawTankPositions();
+		drawTraceInfo(probes[selectedShot]);
+		overlay.repaint();
 	}
 }

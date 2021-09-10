@@ -21,7 +21,9 @@ public class Shot {
 	private float prevPosY;
 	private int power;
 	private int angle;
+	private int hitTank;
 	private boolean hit = false;
+	private boolean alive = true;
 	
 	public Shot(Point start, int power, int angle, boolean left) {
 		
@@ -54,12 +56,16 @@ public class Shot {
 		for (int i = 0; i < enemyTanks.length; i++) {
 			if (enemyTanks[i].distance(getX(), getY()) < 10) {
 				hit = true;
+				hitTank = i;
 			}
+		}
+		if (posY > (float) Bot.get().getOverlay().getScreenshotHeight() / Bot.get().getScreenWidth() || posX < 0 || posX > 1 || hit) {
+			alive = false;
 		}
 	}
 
 	public boolean isAlive() {
-		return !(posY > (float) Bot.get().getOverlay().getScreenshotHeight() / Bot.get().getScreenWidth() || posX < 0 || posX > 1) && !hit;
+		return alive;
 	}
 	
 	public int getX() {
@@ -88,5 +94,9 @@ public class Shot {
 
 	public int getAngle() {
 		return angle;
+	}
+	
+	public int getHitTank() {
+		return hitTank;
 	}
 }
