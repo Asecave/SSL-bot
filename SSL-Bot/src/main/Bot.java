@@ -23,6 +23,7 @@ public class Bot {
 	private Point[] enemyTanks;
 	private Shot[] probes;
 	private int selectedShot;
+	private Obstacle[] obstacles;
 
 	public Bot() {
 		overlay = new Overlay();
@@ -45,6 +46,8 @@ public class Bot {
 				.createScreenCapture(new Rectangle(Toolkit.getDefaultToolkit().getScreenSize().width, overlay.getScreenshotHeight()));
 		overlay.maximize();
 		Graphics2D g2d = overlay.getGraphics();
+		overlay.clear();
+		g2d.setStroke(new BasicStroke(1));
 		g2d.setFont(overlay.getFont());
 		g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
@@ -60,35 +63,168 @@ public class Bot {
 		}
 		overlay.repaint();
 
-		shootProbes(ownTank);
+		detectObstacles(screen);
 		
+		drawObstacles();
+
+		shootProbes(ownTank);
+
 		int bestShot = 0;
-		int mostRightTank = 0;
+		int furthestTank = 0;
 		for (int i = 0; i < enemyTanks.length; i++) {
-			if (enemyTanks[i].getX() > enemyTanks[mostRightTank].getX()) {
-				mostRightTank = i;
+			if (overlay.getShootLeft()) {
+				if (enemyTanks[i].getX() < enemyTanks[furthestTank].getX()) {
+					furthestTank = i;
+				}
+			} else {
+				if (enemyTanks[i].getX() > enemyTanks[furthestTank].getX()) {
+					furthestTank = i;
+				}
 			}
 		}
 		for (int i = 0; i < probes.length; i++) {
-			if (probes[i].getHitTank() == mostRightTank) {
+			if (probes[i].getHitTank() == furthestTank) {
 				if (probes[bestShot].getAngle() < probes[i].getAngle()) {
 					bestShot = i;
 				}
 			}
 		}
 		selectedShot = bestShot;
-		
+
 		draw();
 	}
+
+	private void detectObstacles(BufferedImage screen) {
+		obstacles = new Obstacle[10];
+		BufferedImage obstacle = new BufferedImage(screen.getWidth(), screen.getHeight(), BufferedImage.TYPE_INT_ARGB);
+		int checkRadius = 10;
+		for (int x = 0; x < obstacle.getWidth(); x++) {
+			for (int y = 75; y < obstacle.getHeight(); y++) {
+				if (screen.getRGB(x, y) == Color.WHITE.getRGB()) {
+					for (int u = -checkRadius; u < checkRadius; u++) {
+						for (int v = -checkRadius; v < checkRadius; v++) {
+							int ux = u + x;
+							int vy = v + y;
+							if (ux > 0 && ux < obstacle.getWidth() && vy > 0 && vy < obstacle.getHeight()) {
+								Color pixel = new Color(screen.getRGB(ux, vy));
+								if (match(pixel, new Color(255, 80, 255), 60)) {
+									if (screen.getRGB(x, y) == Color.WHITE.getRGB()) {
+										obstacle.setRGB(x, y, Color.WHITE.getRGB());
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		Color colorCode = new Color(50, 50, 50);
+		int bindex = 0;
+		for (int x = 0; x < obstacle.getWidth(); x++) {
+			for (int y = 75; y < obstacle.getHeight(); y++) {
+				if (obstacle.getRGB(x, y) == Color.WHITE.getRGB()) {
+					Point[] bounds = fillColor(obstacle, Color.WHITE, colorCode, x, y, new Point[] {new Point(x, y), new Point(x, y)});
+					boolean[] corners = checkObstacleCorners(obstacle, bounds, colorCode);
+					if (corners[0] && corners[3]) {
+						obstacles[bindex] = new Obstacle(bounds[0], bounds[1]);
+					} else if (corners[1] && corners[2]) {
+						int temp = bounds[0].x;
+						bounds[0].x = bounds[1].x;
+						bounds[1].x = temp;
+						obstacles[bindex] = new Obstacle(bounds[0], bounds[1]);
+					} else {
+						int cx = bounds[0].x + (bounds[1].x - bounds[0].x) / 2;
+						int cy = bounds[0].y + (bounds[1].y - bounds[0].y) / 2;
+						obstacles[bindex] = new Obstacle(new Point(cx, cy), (bounds[1].x - bounds[0].x) / 2);
+					}
+					colorCode = new Color(colorCode.getRed() + 10, colorCode.getGreen() + 10, colorCode.getBlue() + 10);
+					bindex++;
+				}
+			}
+		}
+		
+		Obstacle[] cut = new Obstacle[bindex];
+		for (int i = 0; i < cut.length; i++) {
+			cut[i] = obstacles[i];
+		}
+		obstacles = cut;
+	}
 	
+	private boolean[] checkObstacleCorners(BufferedImage obstacle, Point[] bounds, Color colorCode) {
+		boolean[] corners = new boolean[4];
+		int checkSize = 10;
+		x: for (int x = bounds[0].x; x < bounds[0].x + checkSize; x++) {
+			for (int y = bounds[0].y; y < bounds[0].y + checkSize; y++) {
+				if (obstacle.getRGB(x, y) == colorCode.getRGB()) {
+					corners[0] = true;
+					break x;
+				}
+			}
+		}
+		x: for (int x = bounds[1].x - checkSize; x < bounds[1].x; x++) {
+			for (int y = bounds[0].y; y < bounds[0].y + checkSize; y++) {
+				if (obstacle.getRGB(x, y) == colorCode.getRGB()) {
+					corners[1] = true;
+					break x;
+				}
+			}
+		}
+		x: for (int x = bounds[0].x; x < bounds[0].x + checkSize; x++) {
+			for (int y = bounds[1].y - checkSize; y < bounds[1].y; y++) {
+				if (obstacle.getRGB(x, y) == colorCode.getRGB()) {
+					corners[2] = true;
+					break x;
+				}
+			}
+		}
+		x: for (int x = bounds[1].x - checkSize; x < bounds[1].x; x++) {
+			for (int y = bounds[1].y - checkSize; y < bounds[1].y; y++) {
+				if (obstacle.getRGB(x, y) == colorCode.getRGB()) {
+					corners[3] = true;
+					break x;
+				}
+			}
+		}
+		return corners;
+	}
+
+	private Point[] fillColor(BufferedImage img, Color key, Color fill, int x, int y, Point[] bounds) {
+		img.setRGB(x, y, fill.getRGB());
+		if (x > 0 && img.getRGB(x - 1, y) == key.getRGB()) {
+			if (x - 1 < bounds[0].x) {
+				bounds[0].x = x - 1;
+			}
+			bounds = fillColor(img, key, fill, x - 1, y, bounds);
+		}
+		if (x < img.getWidth() - 1 && img.getRGB(x + 1, y) == key.getRGB()) {
+			if (x + 1 > bounds[1].x) {
+				bounds[1].x = x + 1;
+			}
+			bounds = fillColor(img, key, fill, x + 1, y, bounds);
+		}
+		if (y > 0 && img.getRGB(x, y - 1) == key.getRGB()) {
+			if (y - 1 < bounds[0].y) {
+				bounds[0].y = y - 1;
+			}
+			bounds = fillColor(img, key, fill, x, y - 1, bounds);
+		}
+		if (y < img.getHeight() - 1 && img.getRGB(x, y + 1) == key.getRGB()) {
+			if (y + 1 > bounds[1].y) {
+				bounds[1].y = y + 1;
+			}
+			bounds = fillColor(img, key, fill, x, y + 1, bounds);
+		}
+		return bounds;
+	}
+
 	private void drawTraceInfo(Shot s) {
 		Graphics2D g2d = overlay.getGraphics();
 		g2d.setColor(Color.CYAN);
 		g2d.setStroke(new BasicStroke(2));
-		g2d.drawString("Selected Trace:", 50, 300);
-		g2d.drawString("Power: " + (s.getPower() + 1), 50, 330);
+		g2d.drawString("Selected trace:", 50, 300);
+		g2d.drawString("Power: " + s.getPower(), 50, 330);
 		g2d.drawString("Angle: " + s.getAngle(), 50, 350);
-		g2d.drawRect(40, 310, 435, 110);
+		g2d.drawRect(40, 310, 125, 50);
 	}
 
 	private void drawTankPositions() {
@@ -124,8 +260,7 @@ public class Bot {
 		g2d.drawString("y: " + pos.y, pos.x + 40, pos.y);
 	}
 
-	private BufferedImage blurImage(BufferedImage img) {
-		int radius = 5;
+	private BufferedImage blurImage(BufferedImage img, int radius) {
 		int size = radius * 2 + 1;
 		float weight = 1.0f / (size * size);
 		float[] data = new float[size * size];
@@ -149,7 +284,7 @@ public class Bot {
 				}
 			}
 		}
-		ownTank = blurImage(ownTank);
+		ownTank = blurImage(ownTank, 5);
 		Point pos = new Point();
 		Color brightestColor = null;
 		for (int x = 0; x < ownTank.getWidth(); x++) {
@@ -177,13 +312,16 @@ public class Bot {
 				}
 			}
 		}
-		enemyTank = blurImage(enemyTank);
+		enemyTank = blurImage(enemyTank, 5);
 
 		for (int t = 0; t < 7; t++) {
 			tanks[t] = new Point();
 			Color brightestColor = null;
 			for (int x = 0; x < enemyTank.getWidth(); x++) {
 				y: for (int y = 0; y < enemyTank.getHeight(); y++) {
+					if (x > ownTank.x - 40 && x < ownTank.x + 40) {
+						continue;
+					}
 					Color pixel = new Color(enemyTank.getRGB(x, y));
 					if (brightestColor == null || pixel.getRed() + pixel.getGreen() + pixel.getBlue() > brightestColor.getRed()
 							+ brightestColor.getGreen() + brightestColor.getBlue()) {
@@ -232,7 +370,7 @@ public class Bot {
 			for (int i = 0; i < probes.length; i++) {
 				if (probes[i].isAlive()) {
 					probesAlive = true;
-					probes[i].step(enemyTanks);
+					probes[i].step(enemyTanks, obstacles);
 					g2d.drawLine(probes[i].getPrevX(), probes[i].getPrevY(), probes[i].getX(), probes[i].getY());
 				}
 			}
@@ -261,6 +399,7 @@ public class Bot {
 
 	private void drawShots() {
 		Graphics2D g2d = overlay.getGraphics();
+		g2d.setStroke(new BasicStroke(1f));
 		g2d.setColor(new Color(0f, 0f, 0.8f, 1f));
 		for (int i = 0; i < probes.length; i++) {
 			if (i == selectedShot) {
@@ -268,18 +407,62 @@ public class Bot {
 			}
 			Shot s = new Shot(ownTank, probes[i].getPower(), probes[i].getAngle(), overlay.getShootLeft());
 			while (s.isAlive()) {
-				s.step(enemyTanks);
+				s.step(enemyTanks, obstacles);
 				g2d.drawLine(s.getPrevX(), s.getPrevY(), s.getX(), s.getY());
 			}
 		}
-		g2d.setColor(new Color(0.6f, 0.6f, 1f, 1f));
-		g2d.setStroke(new BasicStroke(4f));
+		BufferedImage selectedShotImg = new BufferedImage(overlay.getWidth(), overlay.getHeight(), BufferedImage.TYPE_INT_ARGB);
+		Graphics2D shotg2d = selectedShotImg.createGraphics();
+		shotg2d.setColor(new Color(0.6f, 0.6f, 1f, 1f));
+		shotg2d.setStroke(new BasicStroke(2f));
 		Shot s = new Shot(ownTank, probes[selectedShot].getPower(), probes[selectedShot].getAngle(), overlay.getShootLeft());
 		while (s.isAlive()) {
-			s.step(enemyTanks);
-			g2d.drawLine(s.getPrevX(), s.getPrevY(), s.getX(), s.getY());
+			s.step(enemyTanks, obstacles);
+			shotg2d.drawLine(s.getPrevX(), s.getPrevY(), s.getX(), s.getY());
 		}
-		g2d.setStroke(new BasicStroke(1f));
+//		selectedShotImg = blurImage(selectedShotImg, 5);
+//		ampColors(selectedShotImg);
+		shotg2d = selectedShotImg.createGraphics();
+		s = new Shot(ownTank, probes[selectedShot].getPower(), probes[selectedShot].getAngle(), overlay.getShootLeft());
+		while (s.isAlive()) {
+			s.step(enemyTanks, obstacles);
+			shotg2d.drawLine(s.getPrevX(), s.getPrevY(), s.getX(), s.getY());
+		}
+		g2d.drawImage(selectedShotImg, 0, 0, null);
+	}
+	
+	private void ampColors(BufferedImage img) {
+		Color brightestColor = null;
+		for (int x = 0; x < img.getWidth(); x++) {
+			for (int y = 0; y < img.getHeight(); y++) {
+				Color pixel = new Color(img.getRGB(x, y));
+				if (brightestColor == null || pixel.getRed() + pixel.getGreen() + pixel.getBlue() > brightestColor.getRed()
+						+ brightestColor.getGreen() + brightestColor.getBlue()) {
+					brightestColor = pixel;
+				}
+			}
+		}
+		float redAmp = 255f / brightestColor.getRed();
+		float greenAmp = 255f / brightestColor.getGreen();
+		float blueAmp = 255f / brightestColor.getBlue();
+		float amp = Math.max(redAmp, Math.max(greenAmp, blueAmp));
+		for (int x = 0; x < img.getWidth(); x++) {
+			for (int y = 0; y < img.getHeight(); y++) {
+				Color c = new Color(img.getRGB(x, y));
+				int r = Math.min((int) (c.getRed() * amp), 255);
+				int g = Math.min((int) (c.getGreen() * amp), 255);
+				int b = Math.min((int) (c.getBlue() * amp), 255);
+				Color newc = new Color(r, g, b, c.getAlpha());
+				img.setRGB(x, y, newc.getRGB());
+			}
+		}
+	}
+	
+	private void drawObstacles() {
+		Graphics2D g2d = overlay.getGraphics();
+		for (int i = 0; i < obstacles.length; i++) {
+			obstacles[i].draw(g2d);
+		}
 	}
 
 	public int getScreenWidth() {
@@ -307,10 +490,11 @@ public class Bot {
 			draw();
 		}
 	}
-	
+
 	private void draw() {
 		overlay.clear();
 		drawShots();
+		drawObstacles();
 		drawTankPositions();
 		drawTraceInfo(probes[selectedShot]);
 		overlay.repaint();
